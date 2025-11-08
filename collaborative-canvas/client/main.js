@@ -1,3 +1,17 @@
+window.domReady = false;
+window.socketReady = false;
+
+window.checkAppReady = () => {
+  console.log(`checkAppReady called: domReady=${window.domReady}, socketReady=${window.socketReady}`);
+  if (window.domReady && window.socketReady) {
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      loadingScreen.style.display = 'none';
+    }
+    console.log("App is ready, hiding loading screen.");
+  }
+};
+
 // client/main.js
 
 // --- State variables ---
