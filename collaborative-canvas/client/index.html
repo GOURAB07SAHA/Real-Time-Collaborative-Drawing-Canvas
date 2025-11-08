@@ -9,7 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <!-- Loading Screen -->
+    <div class="background-aurora"></div>
+
     <div id="loading-screen" class="loading-screen">
         <div class="loading-content">
             <div class="loading-logo">
@@ -21,7 +22,6 @@
         </div>
     </div>
 
-    <!-- Header -->
     <header class="header">
         <div class="header-left">
             <div class="logo">
@@ -41,9 +41,7 @@
         </div>
     </header>
 
-    <!-- Main Container -->
     <div class="main-container">
-        <!-- Toolbar -->
         <div class="toolbar">
             <div class="tool-group">
                 <h3>Tools</h3>
@@ -109,7 +107,6 @@
             </div>
         </div>
 
-        <!-- Canvas Container -->
         <div class="canvas-container">
             <canvas id="canvas"></canvas>
             <div class="canvas-info">
@@ -118,16 +115,15 @@
         </div>
     </div>
 
-    <!-- Connection Status -->
     <div id="connection-status" class="connection-status">
         <i class="fas fa-circle"></i>
-        <span>Connected</span>
+        <span>Connecting...</span>
     </div>
 
-    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
-    <script src="canvas.js"></script>
-    <script src="websocket.js"></script>
-    <script src="main.js"></script>
+    
+    <script src="canvas.js" defer></script>
+    <script src="websocket.js" defer></script>
+    <script src="main.js" defer></script>
 </body>
 </html>

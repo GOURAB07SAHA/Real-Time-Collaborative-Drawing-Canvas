@@ -1,312 +1,184 @@
-let isReadyForDrawing = false;
+// client/main.js
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM fully loaded and parsed');
-    // Initialize loading screen
-    initializeLoadingScreen();
-    
-    // Initialize connection status
-    initializeConnectionStatus();
-    
-    // Initialize user info
-    initializeUserInfo();
-    
-    // Initialize UI elements
-    initializeUI();
-    
-    // Initialize canvas and drawing
-    initializeCanvasAndDrawing();
-});
+// --- State variables ---
+let currentStroke = null;
+let drawingProps = {
+    color: '#000000',
+    width: 5,
+    isEraser: false,
+    tool: 'brush' // Track the active tool
+};
+let socketAPI = null;
 
-function initializeLoadingScreen() {
-    const loadingScreen = document.createElement('div');
-    loadingScreen.className = 'loading-screen';
-    loadingScreen.innerHTML = `
-        <div class="loading-content">
-            <div class="loading-logo">🎨</div>
-            <h2>Collaborative Canvas</h2>
-            <p>Connecting to the creative space...</p>
-            <div class="loading-spinner"></div>
-        </div>
-    `;
-    document.body.appendChild(loadingScreen);
-}
-
-function hideLoadingScreen() {
-    const loadingScreen = document.querySelector('.loading-screen');
-    if (loadingScreen) {
-        loadingScreen.classList.add('hidden');
-        setTimeout(() => {
-            loadingScreen.remove();
-        }, 500);
-    }
-}
-
-function initializeConnectionStatus() {
-    const statusDiv = document.createElement('div');
-    statusDiv.className = 'connection-status disconnected';
-    statusDiv.innerHTML = `
-        <i>●</i>
-        <span>Connecting...</span>
-    `;
-    document.body.appendChild(statusDiv);
-    
-    // Initialize connection handlers
-    window.onConnectHandlers = window.onConnectHandlers || [];
-    window.onDisconnectHandlers = window.onDisconnectHandlers || [];
-    
-    // Add handlers for connection status
-    window.onConnectHandlers.push(() => {
-        updateConnectionStatus('connected');
-    });
-    
-    window.onDisconnectHandlers.push(() => {
-        updateConnectionStatus('disconnected');
-    });
-}
-
-function requestDrawing() {
-    emit('request-drawing');
-}
-
-function updateConnectionStatus(status) {
-    const statusDiv = document.querySelector('.connection-status');
-    if (!statusDiv) return;
-    
-    statusDiv.className = `connection-status ${status}`;
-    const statusText = statusDiv.querySelector('span');
-    
-    switch(status) {
-        case 'connected':
-            statusText.textContent = 'Connected';
-            break;
-        case 'connecting':
-            statusText.textContent = 'Connecting...';
-            break;
-        case 'disconnected':
-            statusText.textContent = 'Disconnected';
-            break;
-    }
-}
-
-function initializeUserInfo() {
-    const userName = localStorage.getItem('userName') || generateUserName();
-    localStorage.setItem('userName', userName);
-    
-    const userInfo = document.querySelector('.user-info .user-name');
-    if (userInfo) {
-        userInfo.textContent = userName;
-    }
-    
-    const userAvatar = document.querySelector('.user-avatar');
-    if (userAvatar) {
-        userAvatar.textContent = userName.charAt(0).toUpperCase();
-    }
-}
-
-function generateUserName() {
-    const adjectives = ['Creative', 'Artistic', 'Brilliant', 'Innovative', 'Visionary'];
-    const nouns = ['Artist', 'Designer', 'Creator', 'Painter', 'Sketcher'];
-    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const noun = nouns[Math.floor(Math.random() * nouns.length)];
-    return `${adjective}${noun}${Math.floor(Math.random() * 100)}`;
-}
-
-function initializeUI() {
-    // Add event listeners for color presets
-    const colorPresets = document.querySelectorAll('.color-preset');
-    colorPresets.forEach(preset => {
-        preset.addEventListener('click', () => {
-            const color = preset.dataset.color;
-            const colorPicker = document.getElementById('color');
-            colorPicker.value = color;
-            colorPicker.dispatchEvent(new Event('input'));
-            
-            // Update active state
-            colorPresets.forEach(p => p.classList.remove('active'));
-            preset.classList.add('active');
-        });
-    });
-    
-    // Initialize brush preview
-    updateBrushPreview();
-    
-    // Add share functionality
-    const shareBtn = document.querySelector('.share-btn');
-    if (shareBtn) {
-        shareBtn.addEventListener('click', shareCanvas);
-    }
-}
-
+// --- Helper function to update the brush preview ---
 function updateBrushPreview() {
     const preview = document.getElementById('brush-preview');
-    const colorPicker = document.getElementById('color');
-    const strokeWidthPicker = document.getElementById('stroke-width');
+    // Find the dot, or create it if it's the first time
+    const dot = preview.querySelector('.brush-preview-dot') || document.createElement('div');
+    dot.className = 'brush-preview-dot'; // Ensure it has the class
+
+    const width = drawingProps.width;
     
-    if (preview && colorPicker && strokeWidthPicker) {
-        preview.innerHTML = '';
-        const dot = document.createElement('div');
-        dot.className = 'brush-preview-dot';
-        dot.style.width = strokeWidthPicker.value + 'px';
-        dot.style.height = strokeWidthPicker.value + 'px';
-        dot.style.backgroundColor = colorPicker.value;
-        dot.style.borderRadius = '50%';
-        dot.style.margin = 'auto';
+    // Use min/max to keep the preview dot visible but bounded
+    const previewSize = Math.max(2, Math.min(width, 56)); // 56px is (60px - 2px border * 2)
+
+    dot.style.width = `${previewSize}px`;
+    dot.style.height = `${previewSize}px`;
+    
+    // Set color or show a white dot for the eraser
+    dot.style.background = drawingProps.isEraser ? '#ffffff' : drawingProps.color;
+    
+    if (!preview.querySelector('.brush-preview-dot')) {
         preview.appendChild(dot);
     }
 }
 
-function shareCanvas() {
-    const url = window.location.href;
-    if (navigator.share) {
-        navigator.share({
-            title: 'Collaborative Canvas',
-            text: 'Join me on this collaborative canvas!',
-            url: url
-        });
-    } else {
-        navigator.clipboard.writeText(url).then(() => {
-            showNotification('Canvas link copied to clipboard!');
-        });
-    }
-}
-
-function showNotification(message) {
-    const notification = document.createElement('div');
-    notification.className = 'notification';
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: var(--success-color);
-        color: white;
-        padding: 12px 16px;
-        border-radius: var(--radius-lg);
-        z-index: 10000;
-        animation: fadeIn 0.3s ease-out;
-    `;
-    document.body.appendChild(notification);
+// --- Main App Initialization ---
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // --- 1. THE FIX: Hide Loading Screen ---
+    const loadingScreen = document.getElementById('loading-screen');
     
     setTimeout(() => {
-        notification.style.animation = 'fadeOut 0.3s ease-in';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
+        loadingScreen.classList.add('hidden');
+    }, 500); // 500ms delay
 
-function initializeCanvasAndDrawing() {
-    console.log('Initializing canvas and drawing');
+    
+    // --- 2. Get All NEW Element IDs from index.html ---
     const canvas = document.getElementById('canvas');
     const colorPicker = document.getElementById('color');
-    const strokeWidthPicker = document.getElementById('stroke-width');
+    const widthSlider = document.getElementById('stroke-width');
+    const sizeValue = document.getElementById('size-value');
+    const brushBtn = document.getElementById('brush-tool');
+    const eraserBtn = document.getElementById('eraser-tool');
     const undoBtn = document.getElementById('undo');
     const redoBtn = document.getElementById('redo');
-    const eraserTool = document.getElementById('eraser-tool');
-    const brushTool = document.getElementById('brush-tool');
-    const sizeValue = document.getElementById('size-value');
+    const clearBtn = document.getElementById('clear-canvas');
+    const colorPresets = document.querySelectorAll('.color-preset');
+    const shareBtn = document.getElementById('share-room');
+    
+    // --- NEW ---
+    const onlineCountEl = document.querySelector('.online-count');
 
-    // Check if all required elements exist
-    if (!canvas || !colorPicker || !strokeWidthPicker || !undoBtn || !redoBtn) {
-        console.error('Required canvas elements not found');
-        return;
+    // --- 3. Initialize Canvas & WebSocket ---
+    const canvasDimensionsEl = document.getElementById('canvas-dimensions');
+    const canvasAPI = createCanvas('canvas', canvasDimensionsEl); 
+    
+    // --- NEW HELPER FUNCTION ---
+    function setOnlineCount(count) {
+        if (onlineCountEl) {
+            // This updates the text (e.g., "1 user online" or "3 users online")
+            onlineCountEl.textContent = `${count} ${count === 1 ? 'user online' : 'users online'}`;
+        }
     }
 
-    let currentColor = '#000000';
-    let currentStrokeWidth = 5;
-    let isEraser = false;
+    // --- MODIFIED ---
+    // Pass the new function to the websocket module
+    socketAPI = initWebSocket(canvasAPI, setOnlineCount);     
 
-    // Update size display
-    if (sizeValue) {
-        sizeValue.textContent = currentStrokeWidth;
+    // --- 4. Wire up ALL UI Event Listeners ---
+
+    // Tool selection
+    function setActiveTool(tool) {
+        drawingProps.tool = tool;
+        drawingProps.isEraser = (tool === 'eraser');
+        
+        brushBtn.classList.toggle('active', tool === 'brush');
+        eraserBtn.classList.toggle('active', tool === 'eraser');
+        
+        canvasAPI.setDrawingProps(drawingProps);
+        updateBrushPreview();
     }
 
-    colorPicker.addEventListener('input', (e) => {
-        currentColor = e.target.value;
-        isEraser = false;
-        if (brushTool) brushTool.classList.add('active');
-        if (eraserTool) eraserTool.classList.remove('active');
+    brushBtn.addEventListener('click', () => setActiveTool('brush'));
+    eraserBtn.addEventListener('click', () => setActiveTool('eraser'));
+
+    // Color Picker
+    colorPicker.addEventListener('change', (e) => {
+        drawingProps.color = e.target.value;
+        setActiveTool('brush'); 
         updateBrushPreview();
     });
 
-    strokeWidthPicker.addEventListener('input', (e) => {
-        currentStrokeWidth = parseInt(e.target.value);
-        if (sizeValue) {
-            sizeValue.textContent = currentStrokeWidth;
-        }
+    // Color Presets
+    colorPresets.forEach(preset => {
+        preset.addEventListener('click', () => {
+            const color = preset.dataset.color;
+            drawingProps.color = color;
+            colorPicker.value = color; 
+            setActiveTool('brush');
+            updateBrushPreview();
+        });
+    });
+
+    // Width Slider
+    widthSlider.addEventListener('input', (e) => {
+        const width = parseInt(e.target.value, 10);
+        drawingProps.width = width;
+        sizeValue.textContent = width; 
+        canvasAPI.setDrawingProps(drawingProps);
         updateBrushPreview();
     });
 
-    if (eraserTool) {
-        eraserTool.addEventListener('click', () => {
-            isEraser = true;
-            eraserTool.classList.add('active');
-            if (brushTool) brushTool.classList.remove('active');
-        });
-    }
-
-    if (brushTool) {
-        brushTool.addEventListener('click', () => {
-            isEraser = false;
-            brushTool.classList.add('active');
-            if (eraserTool) eraserTool.classList.remove('active');
-        });
-    }
-
-    undoBtn.addEventListener('click', () => {
-        undo();
-    });
-
-    redoBtn.addEventListener('click', () => {
-        redo();
-    });
-
-    initializeCanvas(canvas, currentColor, currentStrokeWidth, isEraser);
-
-    isReadyForDrawing = true;
-
-    // Connect to the WebSocket server and set up listeners
-    connect('main-room', () => {
-        console.log('WebSocket connection established, setting up listeners');
-        setupWebSocketListeners();
-        if (isReadyForDrawing) {
-            console.log('Ready for drawing, requesting drawing state');
-            requestDrawing();
+    // Action Buttons
+    undoBtn.addEventListener('click', () => socketAPI && socketAPI.undo());
+    redoBtn.addEventListener('click', () => socketAPI && socketAPI.redo());
+    
+    clearBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear the entire canvas?')) {
+            socketAPI && socketAPI.clear(); 
         }
     });
-}
 
-function setupWebSocketListeners() {
-    onDrawing((drawing) => {
-        if (Array.isArray(drawing)) {
-            // Received full drawing state
-            clearCanvas();
-            drawing.forEach(item => drawLine(item.x0, item.y0, item.x1, item.y1, item.color, item.strokeWidth));
-            hideLoadingScreen(); // Hide loading screen after initial drawing is loaded
-        } else {
-            // Single drawing action
-            drawLine(drawing.x0, drawing.y0, drawing.x1, drawing.y1, drawing.color, drawing.strokeWidth);
+    // Share Room Button
+    shareBtn.addEventListener('click', () => {
+        const roomURL = window.location.href;
+        
+        navigator.clipboard.writeText(roomURL).then(() => {
+            shareBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            shareBtn.disabled = true; 
+
+            setTimeout(() => {
+                shareBtn.innerHTML = '<i class="fas fa-share-alt"></i> Share Room';
+                shareBtn.disabled = false;
+            }, 2000);
+            
+        }).catch(err => {
+            console.error('Failed to copy URL: ', err);
+            alert('Could not copy URL. Please copy it from the address bar.');
+        });
+    });
+
+    // --- 5. Canvas Mouse Events ---
+    canvas.addEventListener('mousedown', (e) => {
+        currentStroke = {
+            ...drawingProps,
+            points: [{ x: e.offsetX, y: e.offsetY }]
+        };
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (currentStroke) {
+            currentStroke.points.push({ x: e.offsetX, y: e.offsetY });
         }
-        redraw();
     });
 
-    onCursor((data) => {
-        updateCursor(data.userId, data.x, data.y);
-        redraw();
+    canvas.addEventListener('mouseup', () => {
+        if (currentStroke && currentStroke.points.length > 1) {
+            socketAPI && socketAPI.addStroke(currentStroke);
+        }
+        currentStroke = null;
     });
 
-    onUserDisconnected((userId) => {
-        removeCursor(userId);
-        redraw();
+    canvas.addEventListener('mouseleave', () => {
+        if (currentStroke && currentStroke.points.length > 1) {
+            socketAPI && socketAPI.addStroke(currentStroke);
+        }
+        currentStroke = null;
     });
     
-    // Update online users count
-    updateOnlineUsers();
-}
-
-function updateOnlineUsers() {
-    const onlineCount = document.querySelector('.online-count');
-    if (onlineCount) {
-        // This would be updated based on actual user count from server
-        onlineCount.textContent = '1 user online';
-    }
-}
+    // --- 6. Initial State Setup ---
+    sizeValue.textContent = drawingProps.width;
+    updateBrushPreview();
+    setActiveTool('brush'); 
+});

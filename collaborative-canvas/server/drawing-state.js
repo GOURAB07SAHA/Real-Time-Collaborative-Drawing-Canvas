@@ -1,38 +1,40 @@
-const history = [];
-let historyIndex = -1;
+// server/drawing-state.js
 
-function addAction(action) {
-    // If we have undone some actions, we need to remove the undone actions from the history
-    if (historyIndex < history.length - 1) {
-        history.splice(historyIndex + 1);
+class DrawingState {
+  constructor() {
+    this.history = []; // Array of stroke objects
+    this.redoStack = []; // Array of undone stroke objects
+  }
+
+  addStroke(stroke) {
+    this.history.push(stroke);
+    // Adding a new stroke clears the redo stack
+    this.redoStack = []; 
+  }
+
+  undo() {
+    if (this.history.length > 0) {
+      const undoneStroke = this.history.pop();
+      this.redoStack.push(undoneStroke);
     }
-    history.push(action);
-    historyIndex++;
-}
+  }
 
-function undo() {
-    if (historyIndex >= 0) {
-        historyIndex--;
-        return true;
+  redo() {
+    if (this.redoStack.length > 0) {
+      const redoneStroke = this.redoStack.pop();
+      this.history.push(redoneStroke);
     }
-    return false;
+  }
+
+  clear() {
+    this.history = [];
+    this.redoStack = [];
+  }
+
+  getHistory() {
+    // This is the line that was fixed (removed extra dot)
+    return this.history;
+  }
 }
 
-function redo() {
-    if (historyIndex < history.length - 1) {
-        historyIndex++;
-        return true;
-    }
-    return false;
-}
-
-function getDrawing() {
-    return history.slice(0, historyIndex + 1);
-}
-
-module.exports = {
-    addAction,
-    undo,
-    redo,
-    getDrawing
-};
+module.exports = { DrawingState };
